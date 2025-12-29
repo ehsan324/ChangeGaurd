@@ -27,6 +27,9 @@ class Change(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)  # staging/prod
+
+
     status : Mapped[ChangeStatus] = mapped_column(SAEnum(ChangeStatus), nullable=False, default=ChangeStatus.draft)
 
     created_by: Mapped[str] = mapped_column(String(120), nullable=False)
