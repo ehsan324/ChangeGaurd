@@ -9,6 +9,9 @@ services:
     depends_on:
       - postgres
       - redis
+    volumes:
+      - .:/app
+    working_dir: /app
 
   postgres:
     image: postgres:16

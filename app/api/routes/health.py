@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.core.config import get_settings
+from app.core.config import settings
 
 router = APIRouter(tags=["health"])
 
@@ -8,7 +8,6 @@ async def health_check():
     """
     Check liveness/readniess and its dependencies
     """
-    settings = get_settings()
     return {"status": "ok",
             "service": "ChangeGaurd",
             "env": settings.app_env}
