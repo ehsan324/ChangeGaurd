@@ -2,8 +2,9 @@ from uuid import UUID
 
 from sqlalchemy import select, desc
 from app.schemas.simulation_history import SimulationHistoryItem
-from app.db.models import SimulationRun
+from app.db.models import SimulationRun, IdempotencyRecord
 
+from app.core.redis_client import redis_client
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,7 @@ from app.api.deps import get_db
 from app.schemas.change import ChangeCreate, ChangeRead, ApproveRequest, ChangeStatus
 from app.services.change_service import ChangeService
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.schemas.risk import RiskAssessmentRead, BlastRadius
 from app.services.risk_service import RiskService
@@ -23,6 +24,7 @@ from datetime import datetime
 from app.db.models import SimulationRun, SimulationStatus, ChangeStatus
 from app.schemas.simulation import SimulationRunRead
 from app.worker.tasks import run_simulation
+from app.api.idempotency import check_idempotency, store_idempotency_response
 
 router = APIRouter(prefix="/changes", tags=["changes"])
 
@@ -83,11 +85,32 @@ async def assess_change(change_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{change_id}/simulate", status_code=202)
-async def simulate_change(change_id: UUID, db: AsyncSession = Depends(get_db)):
+async def simulate_change(change_id: UUID, request: Request, db: AsyncSession = Depends(get_db)):
+
+    idemp = await check_idempotency(request, db)
+    if isinstance(idemp, IdempotencyRecord):
+        return json.loads(idemp.response_json)
+
+    lock_key = f"lock:simulate:{change_id}"
+    acquired = redis_client.set(lock_key, "1", nx=True, ex=30)
+    if not acquired:
+        raise HTTPException(status_code=409, detail="Simulation lock already held")
+
+    redis_client.delete(lock_key)
+
     change = await ChangeService.get_change(db, change_id=change_id)
 
     if change.status != ChangeStatus.approved:
         raise HTTPException(status_code=409, detail="Change must be approved before simulation")
+
+    stmt = select(SimulationRun).where(
+        SimulationRun.change_id == change.id,
+        SimulationRun.status.in_(SimulationStatus.queued, SimulationStatus.running),
+    )
+    res = await db.execute(stmt)
+    existing = res.scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="Simulation is already running or queued")
 
     sim = SimulationRun(change_id=change.id, status=SimulationStatus.queued, created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow())
@@ -107,10 +130,23 @@ async def simulate_change(change_id: UUID, db: AsyncSession = Depends(get_db)):
 
     run_simulation.delay(str(change.id), str(sim.id))
 
-    return {"status": "queued", "simulation_id": str(sim.id)}
+
+    response = {"status": "queued", "simulation_id": str(sim.id)}
+
+    if isinstance(idemp, IdempotencyRecord):
+        await store_idempotency_response(
+            db,
+            key=idemp["key"],
+            endpoint=idemp["endpoint"],
+            request_hash=idemp["request_hash"],
+            response_json=response,
+            status_code=202
+        )
+        await db.commit()
+    return response
 
 
-from sqlalchemy import select, desc
+
 
 @router.get("/{change_id}/simulation", response_model=SimulationRunRead)
 async def get_latest_simulation(change_id: UUID, db: AsyncSession = Depends(get_db)):

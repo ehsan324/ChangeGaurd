@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import ForeignKey, String, Text, DateTime, Enum as SAEnum
+from sqlalchemy import ForeignKey, String, Text, DateTime, Enum as SAEnum, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -105,3 +105,27 @@ class SimulationRun(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+
+class IdempotencyRecord(Base):
+    __tablename__ = "idempotency_records"
+    __table_args__ = (
+        UniqueConstraint("key", "endpoint", name="uq_idempotency_key_endpoint"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Client-provided idempotency key
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    # Path-only endpoint (e.g. /changes/<id>/simulate)
+    endpoint: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    # SHA256 of request body to prevent key reuse with different payload
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # Stored response for replay
+    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status_code: Mapped[int] = mapped_column(nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
