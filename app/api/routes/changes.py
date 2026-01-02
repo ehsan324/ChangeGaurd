@@ -1,5 +1,9 @@
 from uuid import UUID
 
+from sqlalchemy import select, desc
+from app.schemas.simulation_history import SimulationHistoryItem
+from app.db.models import SimulationRun
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,7 +11,6 @@ from app.api.deps import get_db
 from app.schemas.change import ChangeCreate, ChangeRead, ApproveRequest, ChangeStatus
 from app.services.change_service import ChangeService
 
-import json
 from fastapi import HTTPException
 
 from app.schemas.risk import RiskAssessmentRead, BlastRadius
@@ -132,3 +135,24 @@ async def get_latest_simulation(change_id: UUID, db: AsyncSession = Depends(get_
         created_at=sim.created_at,
         updated_at=sim.updated_at,
     )
+
+
+@router.get("/{change_id}/simulations", response_model=list[SimulationHistoryItem])
+async def list_simulations(change_id: UUID, db: AsyncSession = Depends(get_db)):
+    stmt = (
+        select(SimulationRun)
+        .where(SimulationRun.change_id == change_id)
+        .order_by(desc(SimulationRun.created_at))
+    )
+    res = await db.execute(stmt)
+    sims = res.scalars().all()
+
+    return [
+        SimulationHistoryItem(
+            id=s.id,
+            status=s.status,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+        )
+        for s in sims
+    ]

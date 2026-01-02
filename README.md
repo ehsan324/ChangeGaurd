@@ -48,3 +48,16 @@ curl -X POST ... /changes/{id}/apply -H "Idempotency-Key: ..."
 
 # rollback
 curl -X POST ... /changes/{id}/rollback
+```
+
+## Observability & Operations
+
+The system provides basic operational visibility out of the box:
+
+- `/metrics` endpoint exposes system-level counters
+- Structured JSON logs for all simulation lifecycle events
+- Simulation history per change for traceability
+- Audit logs for all state transitions
+
+This design allows easy integration with monitoring systems such as
+Prometheus, ELK stack, or cloud-native logging platforms.

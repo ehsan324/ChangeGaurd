@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.worker.celery_app import celery_app
 from app.db.session import AsyncSessionLocal
 from app.db.models import Change, SimulationRun, SimulationStatus
+from app.core.logging import log_event
 
 SAMPLE_LOG_PATH = "sample_data/traffic.jsonl"
 
@@ -78,6 +79,16 @@ async def _run_simulation_async(change_id: UUID, sim_id: UUID) -> None:
         sim.updated_at = datetime.utcnow()
         await db.commit()
 
+        duration_ms = int((sim.updated_at - sim.created_at).total_seconds() * 1000)
+
+        log_event(
+            "simulation_completed",
+            simulation_id=str(sim.id),
+            change_id=str(change_id),
+            duration_ms=duration_ms,
+            status=str(sim.status),
+        )
+
         stmt = select(Change).where(Change.id == change_id).options(selectinload(Change.items))
         res = await db.execute(stmt)
         change = res.scalar_one()
@@ -94,6 +105,7 @@ async def _run_simulation_async(change_id: UUID, sim_id: UUID) -> None:
 def run_simulation(change_id: str, sim_id: str) -> None:
     try:
         asyncio.run(_run_simulation_async(UUID(change_id), UUID(sim_id)))
+
     except Exception as e:
 
         async def _mark_failed():
