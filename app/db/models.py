@@ -29,8 +29,7 @@ class Change(Base):
 
     environment: Mapped[str] = mapped_column(String(32), nullable=False)  # staging/prod
 
-
-    status : Mapped[ChangeStatus] = mapped_column(SAEnum(ChangeStatus), nullable=False, default=ChangeStatus.draft)
+    status: Mapped[ChangeStatus] = mapped_column(SAEnum(ChangeStatus), nullable=False, default=ChangeStatus.draft)
 
     created_by: Mapped[str] = mapped_column(String(120), nullable=False)
 
@@ -66,5 +65,21 @@ class AuditLog(Base):
     resource_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+
+class RiskAssessment(Base):
+    __tablename__ = "risk_assessments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    change_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("changes.id", ondelete="CASCADE"),
+                                                 nullable=False)
+
+    score: Mapped[int] = mapped_column(nullable=False)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)  # LOW/MEDIUM/HIGH
+
+    blast_radius_json: Mapped[str] = mapped_column(Text, nullable=False)
+    reasoning_json: Mapped[str] = mapped_column(Text, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
