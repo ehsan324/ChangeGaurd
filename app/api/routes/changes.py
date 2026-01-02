@@ -15,6 +15,11 @@ from app.services.risk_service import RiskService
 from app.services.risk_persistence_service import RiskPersistenceService
 from app.services.audit_service import AuditService
 
+import json
+from datetime import datetime
+from app.db.models import SimulationRun, SimulationStatus, ChangeStatus
+from app.schemas.simulation import SimulationRunRead
+from app.worker.tasks import run_simulation
 
 router = APIRouter(prefix="/changes", tags=["changes"])
 
@@ -71,4 +76,59 @@ async def assess_change(change_id: UUID, db: AsyncSession = Depends(get_db)):
         blast_radius=BlastRadius(**json.loads(ra.blast_radius_json)),
         reasoning=json.loads(ra.reasoning_json),
         created_at=ra.created_at,
+    )
+
+
+@router.post("/{change_id}/simulate", status_code=202)
+async def simulate_change(change_id: UUID, db: AsyncSession = Depends(get_db)):
+    change = await ChangeService.get_change(db, change_id=change_id)
+
+    if change.status != ChangeStatus.approved:
+        raise HTTPException(status_code=409, detail="Change must be approved before simulation")
+
+    sim = SimulationRun(change_id=change.id, status=SimulationStatus.queued, created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow())
+    db.add(sim)
+    await db.flush()
+
+    await AuditService.write(
+        db,
+        actor=change.created_by,
+        action="queue_simulation",
+        resource_type="change",
+        resource_id=str(change.id),
+        metadata={"simulation_id": str(sim.id)},
+    )
+
+    await db.commit()
+
+    run_simulation.delay(str(change.id), str(sim.id))
+
+    return {"status": "queued", "simulation_id": str(sim.id)}
+
+
+from sqlalchemy import select, desc
+
+@router.get("/{change_id}/simulation", response_model=SimulationRunRead)
+async def get_latest_simulation(change_id: UUID, db: AsyncSession = Depends(get_db)):
+    stmt = (
+        select(SimulationRun)
+        .where(SimulationRun.change_id == change_id)
+        .order_by(desc(SimulationRun.created_at))
+        .limit(1)
+    )
+    res = await db.execute(stmt)
+    sim = res.scalar_one_or_none()
+    if not sim:
+        raise HTTPException(status_code=404, detail="No simulation found for this change")
+
+    report = json.loads(sim.report_json) if sim.report_json else None
+    return SimulationRunRead(
+        id=sim.id,
+        change_id=sim.change_id,
+        status=sim.status,
+        report=report,
+        error_message=sim.error_message,
+        created_at=sim.created_at,
+        updated_at=sim.updated_at,
     )

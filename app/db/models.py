@@ -83,3 +83,25 @@ class RiskAssessment(Base):
     reasoning_json: Mapped[str] = mapped_column(Text, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+
+class SimulationStatus(str, Enum):
+    queued = "queued"
+    running = "running"
+    success = "success"
+    failed = "failed"
+
+
+class SimulationRun(Base):
+    __tablename__ = "simulation_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    change_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("changes.id", ondelete="CASCADE"), nullable=False)
+
+    status: Mapped[SimulationStatus] = mapped_column(SAEnum(SimulationStatus), nullable=False, default=SimulationStatus.queued)
+
+    report_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
