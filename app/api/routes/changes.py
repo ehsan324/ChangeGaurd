@@ -10,7 +10,7 @@ from app.services.change_service import ChangeService
 router = APIRouter(prefix="/changes", tags=["changes"])
 
 
-@router.post("", response_model=ChangeRead, status_code=201)
+@router.post("/", response_model=ChangeRead, status_code=201)
 async def create_change(payload: ChangeCreate, db: AsyncSession = Depends(get_db)):
     change = await ChangeService.create_change(db, data=payload)
     return change

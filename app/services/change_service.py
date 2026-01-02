@@ -47,8 +47,7 @@ class ChangeService:
         )
 
         await db.commit()
-        await db.refresh(change)
-        return change
+        return await ChangeService.get_change(db, change_id=change.id)
 
     @staticmethod
     async def get_change(db: AsyncSession, change_id: UUID) -> Change:
@@ -86,5 +85,5 @@ class ChangeService:
         )
 
         await db.commit()
-        await db.refresh(change)
-        return change
+        return await ChangeService.get_change(db, change_id=change.id)
+
