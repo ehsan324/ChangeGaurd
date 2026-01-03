@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -10,6 +10,9 @@ from app.worker.celery_app import celery_app
 from app.db.session import AsyncSessionLocal
 from app.db.models import Change, SimulationRun, SimulationStatus
 from app.core.logging import log_event
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 SAMPLE_LOG_PATH = "sample_data/traffic.jsonl"
 
@@ -76,7 +79,7 @@ async def _run_simulation_async(change_id: UUID, sim_id: UUID) -> None:
     async with AsyncSessionLocal() as db:
         sim = await db.get(SimulationRun, sim_id)
         sim.status = SimulationStatus.running
-        sim.updated_at = datetime.utcnow()
+        sim.updated_at = utc_now()
         await db.commit()
 
         duration_ms = int((sim.updated_at - sim.created_at).total_seconds() * 1000)
@@ -98,7 +101,7 @@ async def _run_simulation_async(change_id: UUID, sim_id: UUID) -> None:
 
         sim.report_json = json.dumps(report)
         sim.status = SimulationStatus.success
-        sim.updated_at = datetime.utcnow()
+        sim.updated_at = utc_now()
         await db.commit()
 
 @celery_app.task(name="run_simulation")
@@ -113,7 +116,7 @@ def run_simulation(change_id: str, sim_id: str) -> None:
                 sim = await db.get(SimulationRun, UUID(sim_id))
                 sim.status = SimulationStatus.failed
                 sim.error_message = str(e)
-                sim.updated_at = datetime.utcnow()
+                sim.updated_at = utc_now()
                 await db.commit()
         asyncio.run(_mark_failed())
         raise

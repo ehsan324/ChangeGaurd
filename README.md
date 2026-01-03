@@ -16,40 +16,46 @@ ChangeGuard introduces a workflow:
 2) Approve it
 3) Assess risk + blast radius
 4) Simulate expected impact
-5) Apply via staged rollout
-6) Roll back safely if needed
-7) Keep a full audit trail
+5) Keep a full audit trail
 
 ## MVP scope
 - Async FastAPI API + PostgreSQL + Redis + Celery worker
 - Change lifecycle state machine
 - Rule-based risk scoring
 - Simulation against sample traffic logs (in-repo)
-- Rollout steps (e.g., 5% → 25% → 100%)
 - Idempotency + concurrency locks
-- Structured logs + Prometheus metrics
 
 ## Quick demo (target)
 ```bash
 # create change
-curl -X POST ... /changes
+curl -s -X POST http://localhost:8000/changes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title":"Tighten login rate limit",
+    "description":"Reduce brute-force risk",
+    "environment":"prod",
+    "created_by":"cj",
+    "items":[
+      {"key":"LOGIN_RATE_LIMIT_PER_MINUTE","old_value":"10","new_value":"3"}
+    ]
+  }'
+
 
 # approve
-curl -X POST ... /changes/{id}/approve
+curl -s -X POST http://localhost:8000/changes/CHANGE_ID/approve \
+  -H "Content-Type: application/json" \
+  -d '{"actor":"cj"}'
 
 # assess
-curl -X POST ... /changes/{id}/assess
+curl -s -X POST http://localhost:8000/changes/CHANGE_ID/assess
 
 # simulate
-curl -X POST ... /changes/{id}/simulate
+curl -s http://localhost:8000/changes/CHANGE_ID/simulation
 
-# apply
-curl -X POST ... /changes/{id}/apply -H "Idempotency-Key: ..."
+# history
+curl -s http://localhost:8000/changes/CHANGE_ID/simulations
 
-# rollback
-curl -X POST ... /changes/{id}/rollback
 ```
-
 ## Observability & Operations
 
 The system provides basic operational visibility out of the box:

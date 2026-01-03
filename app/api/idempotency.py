@@ -12,8 +12,9 @@ from app.db.models import IdempotencyRecord
 async def check_idempotency(
     request: Request,
     db: AsyncSession,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> IdempotencyRecord | dict[str, str] | None:
+
+    idempotency_key = request.headers.get("Idempotency-Key")
 
     if not idempotency_key:
         return None

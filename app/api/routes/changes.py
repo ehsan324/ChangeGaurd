@@ -26,6 +26,9 @@ from app.schemas.simulation import SimulationRunRead
 from app.worker.tasks import run_simulation
 from app.api.idempotency import check_idempotency, store_idempotency_response
 
+from app.core.locks import DistributedLock
+
+
 router = APIRouter(prefix="/changes", tags=["changes"])
 
 
@@ -105,7 +108,7 @@ async def simulate_change(change_id: UUID, request: Request, db: AsyncSession = 
 
     stmt = select(SimulationRun).where(
         SimulationRun.change_id == change.id,
-        SimulationRun.status.in_(SimulationStatus.queued, SimulationStatus.running),
+        SimulationRun.status.in_((SimulationStatus.queued, SimulationStatus.running)),
     )
     res = await db.execute(stmt)
     existing = res.scalar_one_or_none()
